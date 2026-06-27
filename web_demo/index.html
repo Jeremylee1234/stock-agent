@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <!-- Lucide icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --bg:        #f5f0e8;
+      --surface:   #ffffff;
+      --surface-2: #f0ebe2;
+      --border:    rgba(0,0,0,0.08);
+      --border-md: rgba(0,0,0,0.12);
+      --text-1:    #1c1917;
+      --text-2:    #57534e;
+      --text-3:    #a8a29e;
+      --green:     #16a34a;
+      --red:       #dc2626;
+      --amber:     #d97706;
+      --blue:      #2563eb;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --r-sm: 8px; --r-md: 14px; --r-lg: 20px; --r-xl: 24px;
+      --max-w: 760px;
+      --hh: 56px;
+      --ih: 110px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: "DM Sans", -apple-system, "PingFang SC", sans-serif;
+      font-size: 15px; line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+    #app { display: flex; flex-direction: column; height: 100vh; max-width: var(--max-w); margin: 0 auto; }
+
+    /* ── Header ── */
+    #header {
+      position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: var(--max-w); height: var(--hh);
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px; z-index: 100;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 15px; font-weight: 500; color: var(--text-1);
+    }
+    .logo-icon {
+      width: 30px; height: 30px; border-radius: 9px;
+      background: var(--text-1); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .logo-icon svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .header-right { display: flex; align-items: center; gap: 6px; }
+    .hbtn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: var(--r-sm);
+      font-size: 13px; color: var(--text-2); font-family: inherit;
+      background: none; border: none; cursor: pointer;
+      transition: background 120ms var(--ease);
+    }
+    .hbtn:hover { background: var(--surface-2); }
+    .hbtn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    #status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-3); margin-left: 4px;
+      transition: background 300ms var(--ease);
+    }
+    #status-dot.connected  { background: var(--green); }
+    #status-dot.connecting { background: var(--amber); animation: pulse 1.4s ease infinite; }
+    #status-dot.disconnected { background: var(--red); }
+
+    /* ── Messages ── */
+    #message-list {
+      flex: 1; overflow-y: auto; padding: 28px 28px 16px;
+      margin-top: var(--hh); margin-bottom: var(--ih);
+    }
+    #message-list::-webkit-scrollbar { width: 4px; }
+    #message-list::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 2px; }
+
+    /* ── Scroll btn ── */
+    #scroll-btn {
+      position: fixed; bottom: calc(var(--ih) + 14px); left: 50%; transform: translateX(-50%);
+      background: var(--surface); border: 1px solid var(--border-md);
+      color: var(--text-2); padding: 5px 16px; border-radius: 99px;
+      font-size: 12px; font-family: inherit; cursor: pointer;
+      opacity: 0; pointer-events: none;
+      transition: opacity 200ms var(--ease);
+      z-index: 90; box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+    }
+    #scroll-btn.visible { opacity: 1; pointer-events: auto; }
+
+    /* ── Input ── */
+    #input-area {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: var(--max-w); height: var(--ih);
+      background: var(--bg); padding: 12px 28px 20px; z-index: 100;
+    }
+    .input-card {
+      background: var(--surface); border-radius: var(--r-xl);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06);
+      overflow: hidden;
+      transition: box-shadow 150ms var(--ease);
+    }
+    .input-card:focus-within {
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 6px 24px rgba(0,0,0,0.1);
+    }
+    .input-card.shake { animation: shake 0.35s var(--ease); }
+    .input-top {
+      display: flex; align-items: flex-end; gap: 8px;
+      padding: 12px 14px 10px;
+    }
+    #query-input {
+      flex: 1; background: none; border: none; outline: none;
+      color: var(--text-1); font-size: 14px; font-family: inherit;
+      line-height: 1.55; resize: none; max-height: 100px;
+    }
+    #query-input::placeholder { color: var(--text-3); }
+    #query-input:disabled { opacity: 0.4; }
+    #send-btn {
+      width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
+      background: var(--text-1); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity 150ms var(--ease), transform 100ms var(--ease);
+    }
+    #send-btn:hover:not(:disabled) { opacity: 0.82; }
+    #send-btn:active:not(:disabled) { transform: scale(0.92); }
+    #send-btn:disabled { opacity: 0.22; cursor: not-allowed; }
+    #send-btn svg { width: 15px; height: 15px; stroke: #fff; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .input-bottom {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 14px 10px; font-size: 12px; color: var(--text-3);
+    }
+    .input-hint { display: flex; align-items: center; gap: 4px; }
+    .input-hint svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+    /* ── User bubble ── */
+    .user-bubble {
+      margin-left: auto; max-width: 66%;
+      background: var(--surface); border-radius: var(--r-xl) var(--r-xl) var(--r-sm) var(--r-xl);
+      padding: 12px 18px; font-size: 15px; line-height: 1.55;
+      white-space: pre-wrap; word-break: break-word; color: var(--text-1);
+      margin-bottom: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.05);
+      animation: fadeUp 200ms var(--ease);
+    }
+
+    /* ── AI text (inline, no card) ── */
+    .ai-text {
+      font-size: 15px; color: var(--text-1); line-height: 1.7;
+      margin-bottom: 16px; animation: fadeUp 200ms var(--ease);
+    }
+
+    /* ── Plan block ── */
+    .plan-block { margin-bottom: 20px; animation: fadeUp 200ms var(--ease); }
+    .plan-label {
+      font-size: 11px; font-weight: 500; letter-spacing: 0.07em;
+      text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;
+    }
+    .plan-type { font-size: 15px; color: var(--text-1); margin-bottom: 12px; }
+    .plan-steps {
+      background: var(--surface); border-radius: var(--r-md);
+      overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .plan-step {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; font-size: 13.5px; color: var(--text-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .plan-step:last-child { border-bottom: none; }
+    .plan-step-n {
+      width: 22px; height: 22px; border-radius: 7px;
+      background: var(--surface-2); font-size: 11px; font-weight: 500;
+      color: var(--text-3); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .plan-step-title { flex: 1; color: var(--text-1); }
+    .plan-step-tools { font-size: 11px; color: var(--text-3); font-family: "SF Mono", monospace; }
+    .plan-kp { margin-top: 8px; font-size: 12.5px; color: var(--text-3); }
+
+    /* ── Stage block ── */
+    .stage-block {
+      margin-bottom: 16px; animation: fadeUp 200ms var(--ease);
+    }
+    .stage-header {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 14.5px; color: var(--text-1); margin-bottom: 10px;
+      cursor: pointer; user-select: none;
+    }
+    .stage-header-icon {
+      width: 22px; height: 22px; border-radius: 7px;
+      background: var(--surface-2); display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .stage-header-icon svg { width: 13px; height: 13px; stroke: var(--text-2); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .stage-title-text { flex: 1; font-weight: 400; }
+    .stage-status { display: flex; align-items: center; }
+    .stage-dur { font-size: 12px; color: var(--text-3); margin-left: 6px; }
+    .stage-chevron { color: var(--text-3); display: flex; transition: transform 250ms var(--ease); }
+    .stage-chevron svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .stage-block.open .stage-chevron { transform: rotate(180deg); }
+
+    .stage-body { max-height: 0; overflow: hidden; transition: max-height 350ms var(--ease); }
+    .stage-block.open .stage-body { max-height: 8000px; }
+
+    /* Tool list card */
+    .tool-list {
+      background: var(--surface); border-radius: var(--r-md);
+      overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    /* Stage text (thinking) */
+    .stage-text {
+      background: var(--surface); border-radius: var(--r-md);
+      color: var(--text-2); font-family: "SF Mono","Fira Code",monospace;
+      font-size: 12px; line-height: 1.75; padding: 12px 16px;
+      white-space: pre-wrap; word-break: break-all;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .stage-text.streaming::after {
+      content: '▋'; animation: blink 1s step-end infinite;
+      color: var(--text-3); font-size: 10px; margin-left: 1px;
+    }
+    .stage-text.md-mode {
+      font-family: "DM Sans", sans-serif; font-size: 15px;
+      color: var(--text-1); white-space: normal; word-break: break-word; line-height: 1.75;
+    }
+    .stage-text.md-mode h1,.stage-text.md-mode h2,.stage-text.md-mode h3 { font-weight: 600; margin: 16px 0 6px; }
+    .stage-text.md-mode h1 { font-size: 20px; } .stage-text.md-mode h2 { font-size: 17px; } .stage-text.md-mode h3 { font-size: 15px; }
+    .stage-text.md-mode p { margin: 7px 0; }
+    .stage-text.md-mode ul,.stage-text.md-mode ol { margin: 7px 0; padding-left: 22px; }
+    .stage-text.md-mode li { margin: 4px 0; }
+    .stage-text.md-mode strong { font-weight: 600; }
+    .stage-text.md-mode code { background: var(--surface-2); border-radius: 4px; font-family: "SF Mono",monospace; font-size: 12px; padding: 1px 5px; }
+    .stage-text.md-mode pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); margin: 10px 0; overflow-x: auto; padding: 12px 14px; }
+    .stage-text.md-mode pre code { background: none; padding: 0; }
+    .stage-text.md-mode table { border-collapse: collapse; font-size: 13px; margin: 10px 0; width: 100%; }
+    .stage-text.md-mode th,.stage-text.md-mode td { border: 1px solid var(--border); padding: 7px 12px; text-align: left; }
+    .stage-text.md-mode th { background: var(--surface-2); font-weight: 500; }
+    .stage-text.md-mode blockquote { border-left: 2px solid var(--border-md); color: var(--text-2); margin: 8px 0; padding: 4px 14px; }
+
+    /* ── Tool row ── */
+    .tool-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background 120ms var(--ease);
+    }
+    .tool-row:last-of-type { border-bottom: none; }
+    .tool-row:hover { background: var(--surface-2); }
+    .tool-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-3); flex-shrink: 0;
+      transition: background 200ms var(--ease);
+    }
+    .tool-dot.pending { background: var(--amber); animation: pulse 1.4s ease infinite; }
+    .tool-dot.success { background: var(--green); }
+    .tool-dot.error   { background: var(--red); }
+    .tool-icon {
+      width: 22px; height: 22px; border-radius: 6px;
+      background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .tool-icon svg { width: 12px; height: 12px; stroke: var(--text-2); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .tool-label { flex: 1; font-size: 13.5px; color: var(--text-1); font-family: "SF Mono","Fira Code",monospace; }
+    .tool-status-icon { flex-shrink: 0; display: flex; align-items: center; }
+    .tool-status-icon .spinner { width: 12px; height: 12px; border: 1.5px solid var(--border-md); border-top-color: var(--text-3); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    .tool-status-icon .ok  { color: var(--green); font-size: 13px; }
+    .tool-status-icon .err { color: var(--red); font-size: 13px; }
+    .tool-chev { color: var(--text-3); display: flex; transition: transform 250ms var(--ease); }
+    .tool-chev svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .tool-row.open .tool-chev { transform: rotate(180deg); }
+
+    .tool-detail { max-height: 0; overflow: hidden; transition: max-height 300ms var(--ease); border-bottom: 1px solid var(--border); }
+    .tool-row.open + .tool-detail { max-height: 1200px; }
+    .tool-detail:last-child { border-bottom: none; }
+    .tool-args {
+      padding: 8px 16px 10px 52px;
+      font-family: "SF Mono","Fira Code",monospace; font-size: 11.5px;
+      color: var(--text-3); white-space: pre-wrap; word-break: break-all; line-height: 1.65;
+    }
+    .tool-result-text {
+      padding: 6px 16px 10px 52px; font-size: 12.5px; color: var(--text-2);
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .tool-result-text.err { color: var(--red); }
+
+    /* ── Answer ── */
+    .answer-block { margin-bottom: 16px; animation: fadeUp 200ms var(--ease); }
+    .answer-tag {
+      font-size: 11px; font-weight: 500; letter-spacing: 0.07em;
+      text-transform: uppercase; color: var(--text-3); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .answer-tag::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+    .answer-content { font-size: 15px; color: var(--text-1); line-height: 1.8; }
+    .answer-content h1,.answer-content h2,.answer-content h3 { font-weight: 600; margin: 18px 0 8px; }
+    .answer-content h1 { font-size: 22px; } .answer-content h2 { font-size: 18px; } .answer-content h3 { font-size: 15px; }
+    .answer-content p { margin: 8px 0; }
+    .answer-content ul,.answer-content ol { margin: 8px 0; padding-left: 22px; }
+    .answer-content li { margin: 4px 0; }
+    .answer-content strong { font-weight: 600; }
+    .answer-content code { background: var(--surface-2); border-radius: 4px; font-family: "SF Mono",monospace; font-size: 12px; padding: 1px 5px; }
+    .answer-content pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); margin: 12px 0; overflow-x: auto; padding: 14px 16px; }
+    .answer-content pre code { background: none; padding: 0; }
+    .answer-content table { border-collapse: collapse; font-size: 13px; margin: 12px 0; width: 100%; }
+    .answer-content th,.answer-content td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+    .answer-content th { background: var(--surface-2); font-weight: 500; }
+    .answer-meta { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; font-size: 12px; color: var(--text-3); }
+
+    /* ── Error ── */
+    .error-card {
+      display: flex; align-items: flex-start; gap: 12px;
+      background: #fef2f2; border: 1px solid rgba(220,38,38,0.15);
+      border-radius: var(--r-md); padding: 12px 16px; margin-bottom: 16px;
+      animation: fadeUp 200ms var(--ease);
+    }
+    .error-icon { color: var(--red); flex-shrink: 0; display: flex; margin-top: 1px; }
+    .error-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .error-text { flex: 1; font-size: 13.5px; color: var(--text-1); line-height: 1.5; }
+    .error-retry {
+      background: none; border: 1px solid rgba(220,38,38,0.25);
+      border-radius: var(--r-sm); color: var(--red); cursor: pointer;
+      font-size: 12.5px; font-family: inherit; padding: 4px 12px; flex-shrink: 0;
+      transition: background 120ms var(--ease);
+    }
+    .error-retry:hover { background: rgba(220,38,38,0.06); }
+
+    /* ── Analyzing state ── */
+    .analyzing-block {
+      display: flex; align-items: center; gap: 10px;
+      padding: 4px 0; margin-bottom: 16px;
+      animation: fadeUp 200ms var(--ease);
+      font-size: 14px; color: var(--text-2);
+    }
+    .analyzing-spinner {
+      width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid var(--border-md); border-top-color: var(--text-2);
+      animation: spin 0.8s linear infinite;
+    }
+
+    /* ── Stage summary ── */
+    .stage-summary {
+      font-size: 12.5px; color: var(--text-3);
+      padding: 6px 14px 10px; border-top: 1px solid var(--border);
+      font-style: italic;
+    }
+
+    /* ── Spinner / check ── */
+    .spinner { width: 13px; height: 13px; border: 1.5px solid var(--border-md); border-top-color: var(--text-2); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+
+    /* ── Animations ── */
+    @keyframes spin    { to { transform: rotate(360deg); } }
+    @keyframes blink   { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+    @keyframes pulse   { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+    @keyframes fadeUp  { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes shake   { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header id="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+      </div>
+      Stock Agent
+    </div>
+    <div class="header-right">
+      <button class="hbtn" id="new-chat-btn">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        新对话
+      </button>
+      <div id="status-dot" title="连接状态"></div>
+    </div>
+  </header>
+
+  <main id="message-list"></main>
+  <button id="scroll-btn" type="button">↓ 回到底部</button>
+
+  <footer id="input-area">
+    <div class="input-card" id="input-card">
+      <div class="input-top">
+        <textarea id="query-input" placeholder="输入股票分析问题…" rows="1"></textarea>
+        <button id="send-btn" type="button" aria-label="发送">
+          <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+      <div class="input-bottom">
+        <span class="input-hint">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Enter 发送 · Shift+Enter 换行
+        </span>
+      </div>
+    </div>
+  </footer>
+</div>
+<script>
+
+  // ── Helpers ──
+  function uuid() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+  const validQ = s => typeof s === 'string' && s.trim().length > 0;
+  const fmtMs  = ms => ms < 1000 ? `${Math.round(ms)}ms` : `${(ms/1000).toFixed(1)}s`;
+  function parseSSE(line) {
+    if (!line || line.startsWith(':')) return null;
+    const i = line.indexOf(':');
+    if (i === -1) return { field: line, value: '' };
+    return { field: line.slice(0, i), value: line.slice(i+1).replace(/^ /,'') };
+  }
+  // SVG icon helpers (Lucide-style inline)
+  const icons = {
+    chevDown: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
+    search:   `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+    database: `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
+    chart:    `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+    pen:      `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
+    tool:     `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
+    alert:    `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+  };
+  function stageIcon(stage) {
+    if (stage === 'collect_data')    return icons.database;
+    if (stage === 'analyze_data')    return icons.chart;
+    if (stage === 'generate_answer') return icons.pen;
+    return icons.search;
+  }
+  function toolIcon(name) {
+    if (name && name.includes('search')) return icons.search;
+    if (name && (name.includes('history') || name.includes('daily') || name.includes('basic'))) return icons.chart;
+    return icons.tool;
+  }
+
+  // ── State ──
+  const S = { id:'', streaming:false, stage:null, stages:{}, tools:{}, ctrl:null };
+
+  // ── DOM ──
+  const qInput   = document.getElementById('query-input');
+  const sendBtn  = document.getElementById('send-btn');
+  const inputCard= document.getElementById('input-card');
+  const statusDot= document.getElementById('status-dot');
+  const msgList  = document.getElementById('message-list');
+  const scrollBtn= document.getElementById('scroll-btn');
+
+  document.getElementById('new-chat-btn').addEventListener('click', () => {
+    if (S.streaming) return;
+    msgList.innerHTML = '';
+    S.stage = null; S.stages = {}; S.tools = {};
+  });
+
+  // ── Status ──
+  function setStatus(s) {
+    statusDot.className = s;
+    statusDot.title = { connected:'已连接', connecting:'连接中', disconnected:'断开' }[s] || s;
+  }
+  setStatus('connected');
+  function setStreaming(v) {
+    S.streaming = v; qInput.disabled = v; sendBtn.disabled = v;
+    setStatus(v ? 'connecting' : 'connected');
+  }
+
+  // ── Scroll ──
+  let scrolledUp = false;
+  function toBottom() { if (!scrolledUp) msgList.scrollTop = msgList.scrollHeight; }
+  msgList.addEventListener('scroll', () => {
+    scrolledUp = msgList.scrollHeight - msgList.scrollTop - msgList.clientHeight > 80;
+    scrollBtn.classList.toggle('visible', scrolledUp);
+  });
+  scrollBtn.addEventListener('click', () => {
+    scrolledUp = false;
+    msgList.scrollTo({ top: msgList.scrollHeight, behavior: 'smooth' });
+    scrollBtn.classList.remove('visible');
+  });
+
+  // ── Input ──
+  function shake() {
+    inputCard.classList.remove('shake'); void inputCard.offsetWidth;
+    inputCard.classList.add('shake');
+    inputCard.addEventListener('animationend', () => inputCard.classList.remove('shake'), { once: true });
+  }
+  qInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!S.streaming) send(); }
+  });
+  sendBtn.addEventListener('click', () => { if (!S.streaming) send(); });
+
+  // ── Send ──
+  let lastQ = '';
+  async function send() {
+    const q = qInput.value;
+    if (!validQ(q)) { shake(); return; }
+    if (S.ctrl) S.ctrl.abort();
+    S.id = uuid(); S.ctrl = new AbortController();
+    setStreaming(true);
+    let res;
+    try {
+      res = await fetch('/api/v1/analysis/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, session_id: S.id }),
+        signal: S.ctrl.signal,
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      setStreaming(false); setStatus('disconnected');
+      showErr('无法连接到服务器，请确认后端正在运行。'); return;
+    }
+    if (!res.ok) {
+      setStreaming(false); setStatus('disconnected');
+      let d = `HTTP ${res.status}`;
+      try { const b = await res.json(); d = b.detail || b.message || d; } catch (_) {}
+      showErr(`请求失败：${d}`); return;
+    }
+    lastQ = q; qInput.value = '';
+    await readStream(res);
+  }
+
+  async function readStream(res) {
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', evType = '', evData = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop();
+        for (const line of lines) {
+          if (line === '') {
+            if (evType && evData) {
+              try { dispatch(evType, JSON.parse(evData)); } catch (e) { console.warn('[SSE]', e); }
+            }
+            evType = ''; evData = '';
+          } else {
+            const p = parseSSE(line);
+            if (!p) continue;
+            if (p.field === 'event') evType = p.value;
+            else if (p.field === 'data') evData += p.value;
+          }
+        }
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') showErr('连接中断，请重试。');
+    } finally { setStreaming(false); }
+  }
+
+  function dispatch(type, data) {
+    switch (type) {
+      case 'workflow_start':    onStart(data); break;
+      case 'execution_plan':    onPlan(data); break;
+      case 'analyzing':         onAnalyzing(data); break;
+      case 'stage_start':       onStageStart(data); break;
+      case 'analysis_chunk':    onChunk(data); break;
+      case 'tool_call':         /* 隐藏工具调用细节 */ break;
+      case 'tool_result':       onToolResult(data); break;
+      case 'stage_complete':    onStageComplete(data); break;
+      case 'final_answer':      onFinal(data); break;
+      case 'error':             showErr(data.error_message || '未知错误'); break;
+      case 'workflow_complete': onDone(); break;
+      default: console.log('[SSE]', type, data);
+    }
+  }
+
+  // ── Event handlers ──
+  function onStart(data) {
+    msgList.innerHTML = '';
+    S.stage = null; S.stages = {}; S.tools = {};
+    S.t0 = Date.now();
+    // 清除旧的 analyzing 状态
+    S.analyzingEl = null;
+    const b = document.createElement('div');
+    b.className = 'user-bubble'; b.textContent = data.query;
+    msgList.appendChild(b); toBottom();
+  }
+
+  function onAnalyzing(data) {
+    // 如果已有 analyzing 块则不重复创建
+    if (S.analyzingEl) return;
+    const el = document.createElement('div');
+    el.className = 'analyzing-block';
+    el.innerHTML = `
+      <span class="analyzing-spinner"></span>
+      <span class="analyzing-text">${data.message || '正在分析问题，制定执行计划…'}</span>`;
+    msgList.appendChild(el);
+    S.analyzingEl = el;
+    toBottom();
+  }
+
+  function onPlan(data) {
+    // 移除 analyzing 状态块
+    if (S.analyzingEl) { S.analyzingEl.remove(); S.analyzingEl = null; }
+    const el = document.createElement('div'); el.className = 'plan-block';
+    const stages = data.workflow_stages || data.stages || [];
+    const kp = data.key_points || [];
+    let html = `<div class="plan-label">执行计划</div>
+      <div class="plan-type">${data.question_type || '综合分析'}</div>`;
+    if (stages.length) {
+      html += `<div class="plan-steps">`;
+      stages.forEach((s, i) => {
+        const tools = Array.isArray(s.tools) && s.tools.length
+          ? `<span class="plan-step-tools">${s.tools.join(' · ')}</span>` : '';
+        html += `<div class="plan-step">
+          <span class="plan-step-n">${i+1}</span>
+          <span class="plan-step-title">${s.title || s.goal || '步骤'+(i+1)}</span>${tools}
+        </div>`;
+      });
+      html += `</div>`;
+    }
+    if (kp.length) html += `<div class="plan-kp">关注：${kp.join(' · ')}</div>`;
+    el.innerHTML = html;
+    msgList.appendChild(el); toBottom();
+  }
+
+  function onStageStart(data) {
+    const block = document.createElement('div');
+    block.className = 'stage-block open'; block.dataset.stage = data.stage;
+
+    const header = document.createElement('div'); header.className = 'stage-header';
+    header.innerHTML = `
+      <span class="stage-header-icon">${stageIcon(data.stage)}</span>
+      <span class="stage-title-text">${data.title}</span>
+      <span class="stage-status"><span class="spinner"></span></span>
+      <span class="stage-dur"></span>
+      <span class="stage-chevron">${icons.chevDown}</span>`;
+    header.addEventListener('click', () => block.classList.toggle('open'));
+
+    const body = document.createElement('div'); body.className = 'stage-body';
+
+    // tool list container + text area
+    const toolList = document.createElement('div'); toolList.className = 'tool-list';
+    const textEl   = document.createElement('div');
+    textEl.className = 'stage-text streaming' + (data.stage === 'generate_answer' ? ' md-mode' : '');
+
+    body.appendChild(toolList);
+    if (data.stage !== 'collect_data') body.appendChild(textEl);
+
+    block.appendChild(header); block.appendChild(body);
+    msgList.appendChild(block);
+
+    S.stage = data.stage;
+    S.stages[data.stage] = { el: block, body, toolList, textEl, content: '' };
+    toBottom();
+  }
+
+  function onChunk(data) {
+    const sd = S.stages[data.stage];
+    if (!sd) return;
+    // ensure textEl is in body for generate_answer
+    if (!sd.body.contains(sd.textEl)) sd.body.appendChild(sd.textEl);
+    sd.content += data.content;
+    if (data.stage === 'generate_answer') {
+      sd.textEl.innerHTML = marked.parse(sd.content);
+      sd.textEl.querySelectorAll('pre code').forEach(b => { if (!b.dataset.hl) { hljs.highlightElement(b); b.dataset.hl='1'; } });
+    } else {
+      sd.textEl.textContent = sd.content;
+    }
+    toBottom();
+  }
+
+  function onToolCall(data) {
+    const sd = S.stages[S.stage];
+    if (!sd) return;
+
+    const row = document.createElement('div'); row.className = 'tool-row';
+    row.innerHTML = `
+      <span class="tool-dot pending"></span>
+      <span class="tool-icon">${toolIcon(data.tool_name)}</span>
+      <span class="tool-label">${data.tool_name}</span>
+      <span class="tool-status-icon"><span class="spinner"></span></span>
+      <span class="tool-chev">${icons.chevDown}</span>`;
+
+    const detail = document.createElement('div'); detail.className = 'tool-detail';
+    detail.innerHTML = `<div class="tool-args">${JSON.stringify(data.args, null, 2)}</div>`;
+
+    row.addEventListener('click', () => row.classList.toggle('open'));
+    sd.toolList.appendChild(row);
+    sd.toolList.appendChild(detail);
+    S.tools[data.tool_id] = { row, detail };
+    toBottom();
+  }
+
+  function onToolResult(data) {
+    const t = S.tools[data.tool_id];
+    if (!t) return;
+    const dot = t.row.querySelector('.tool-dot');
+    const si  = t.row.querySelector('.tool-status-icon');
+    if (dot) dot.className = 'tool-dot ' + (data.status === 'success' ? 'success' : 'error');
+    if (si)  si.innerHTML  = data.status === 'success'
+      ? '<span class="ok">✓</span>'
+      : '<span class="err">✗</span>';
+    if (data.summary || data.error) {
+      const r = document.createElement('div');
+      r.className = 'tool-result-text' + (data.status === 'error' ? ' err' : '');
+      r.textContent = data.error || data.summary;
+      t.detail.appendChild(r);
+    }
+    t.row.classList.remove('open');
+  }
+
+  function onStageComplete(data) {
+    const sd = S.stages[data.stage];
+    if (!sd) return;
+    const si  = sd.el.querySelector('.stage-status');
+    const dur = sd.el.querySelector('.stage-dur');
+    if (si)  si.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    if (dur) dur.textContent = fmtMs(data.duration_ms);
+    sd.textEl.classList.remove('streaming');
+    // 展示阶段摘要
+    if (data.summary) {
+      const sumEl = document.createElement('div');
+      sumEl.className = 'stage-summary';
+      sumEl.textContent = data.summary;
+      sd.body.appendChild(sumEl);
+    }
+    sd.el.classList.remove('open');
+  }
+
+  function onFinal(data) {
+    const gs = S.stages['generate_answer'];
+    if (gs && gs.content) {
+      gs.textEl.innerHTML = marked.parse(data.content || gs.content);
+      gs.textEl.querySelectorAll('pre code').forEach(b => { if (!b.dataset.hl) { hljs.highlightElement(b); b.dataset.hl='1'; } });
+      appendMeta(gs.el, data.metadata); toBottom(); return;
+    }
+    const block = document.createElement('div'); block.className = 'answer-block';
+    const tag = document.createElement('div'); tag.className = 'answer-tag'; tag.textContent = '分析结论';
+    const content = document.createElement('div'); content.className = 'answer-content';
+    marked.setOptions({ breaks: true, gfm: true });
+    content.innerHTML = marked.parse(data.content || '');
+    content.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+    block.appendChild(tag); block.appendChild(content);
+    appendMeta(block, data.metadata);
+    msgList.appendChild(block); toBottom();
+  }
+
+  function appendMeta(container, meta) {
+    if (!meta) return;
+    const el = document.createElement('div'); el.className = 'answer-meta';
+    if (meta.total_duration_ms != null) {
+      const d = document.createElement('span'); d.textContent = `⏱ ${fmtMs(meta.total_duration_ms)}`; el.appendChild(d);
+    }
+    if (Array.isArray(meta.tools_used) && meta.tools_used.length) {
+      const t = document.createElement('span'); t.textContent = `${meta.tools_used.length} 个工具`; el.appendChild(t);
+    }
+    if (el.children.length) container.appendChild(el);
+  }
+
+  function onDone() {
+    document.querySelectorAll('.stage-text.streaming').forEach(e => e.classList.remove('streaming'));
+    setStreaming(false); setStatus('connected');
+  }
+
+  function showErr(msg) {
+    const card = document.createElement('div'); card.className = 'error-card';
+    card.innerHTML = `
+      <span class="error-icon">${icons.alert}</span>
+      <span class="error-text">${msg}</span>
+      <button class="error-retry" type="button">重试</button>`;
+    card.querySelector('.error-retry').addEventListener('click', () => {
+      if (lastQ) { qInput.value = lastQ; send(); }
+    });
+    msgList.appendChild(card); toBottom();
+  }
+</script>
+</body>
+</html>

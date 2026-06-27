@@ -1,0 +1,18 @@
+services:
+  stock-agent-api:
+    build: .
+    image: stock-agent-api:latest
+    container_name: stock-agent-api
+    restart: unless-stopped
+    ports:
+      - "${API__PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      ENVIRONMENT: production
+      API__HOST: 0.0.0.0
+      API__PORT: 8000
+    volumes:
+      - ./logs:/app/logs
+      - ./data_cache:/app/data_cache
+      - ./.data:/app/.data

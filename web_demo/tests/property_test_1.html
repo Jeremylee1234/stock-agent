@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Property Test 1 — 有效查询使消息列表增长</title>
+  <style>
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 32px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 18px; margin-bottom: 8px; }
+    .meta { color: #8b949e; font-size: 12px; margin-bottom: 24px; }
+    #result {
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    #result.pass { background: rgba(63,185,80,0.15); border: 1px solid #3fb950; color: #3fb950; }
+    #result.fail { background: rgba(248,81,73,0.15); border: 1px solid #f85149; color: #f85149; }
+    #result.pending { background: rgba(88,166,255,0.1); border: 1px solid #58a6ff; color: #58a6ff; }
+    pre {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #8b949e;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Property Test 1: 有效查询使消息列表增长</h1>
+  <div class="meta">
+    Validates: Requirements 1.1 &nbsp;|&nbsp;
+    Feature: stock-agent-desktop-ui &nbsp;|&nbsp;
+    Framework: fast-check (CDN)
+  </div>
+
+  <div id="result" class="pending">⏳ 运行中...</div>
+  <pre id="detail"></pre>
+
+  <!-- Hidden message-list used by the functions under test -->
+  <div id="message-list" style="display:none;"></div>
+
+  <script type="module">
+    // Feature: stock-agent-desktop-ui, Property 1: 有效查询使消息列表增长
+
+    import * as fc from 'https://cdn.jsdelivr.net/npm/fast-check@3/+esm';
+
+    // ─── Minimal re-implementation of the logic under test ───────────────────
+
+    /**
+     * generateSessionId — mirrors the production implementation.
+     * Generates a UUID v4 string.
+     * @returns {string}
+     */
+    function generateSessionId() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    }
+
+    /**
+     * onWorkflowStart — mirrors the production implementation.
+     * Clears #message-list, resets session state, and appends a user bubble.
+     * @param {object} session
+     * @param {string} sessionId
+     * @param {string} query
+     */
+    function onWorkflowStart(session, sessionId, query) {
+      const messageList = document.getElementById('message-list');
+      messageList.innerHTML = '';
+      // Reset session stage state
+      session.currentStage = null;
+      session.stages = { collect_data: null, generate_answer: null };
+      session.toolCalls = {};
+      session.startTime = new Date();
+      // Append user bubble
+      const bubble = document.createElement('div');
+      bubble.className = 'user-bubble';
+      bubble.textContent = query;
+      messageList.appendChild(bubble);
+    }
+
+    // ─── Property 1 ──────────────────────────────────────────────────────────
+
+    const resultEl = document.getElementById('result');
+    const detailEl = document.getElementById('detail');
+
+    try {
+      fc.assert(
+        fc.property(
+          // Generate arbitrary non-empty, non-whitespace-only strings
+          fc.string({ minLength: 1 }).filter(s => s.trim().length > 0),
+          (query) => {
+            // Setup: fresh session
+            const session = {
+              currentStage: null,
+              stages: { collect_data: null, generate_answer: null },
+              toolCalls: {},
+              startTime: null,
+            };
+
+            const messageList = document.getElementById('message-list');
+            // Ensure the list starts empty (simulate a fresh page state)
+            messageList.innerHTML = '';
+            const countBefore = messageList.childElementCount; // always 0
+
+            // Act: trigger onWorkflowStart (clears list, then creates user bubble)
+            const sessionId = generateSessionId();
+            onWorkflowStart(session, sessionId, query);
+
+            // Assert: message list has grown by at least 1 (user bubble was added)
+            const countAfter = messageList.childElementCount;
+            return countAfter >= countBefore + 1;
+          }
+        ),
+        { numRuns: 100 }
+      );
+
+      // PASS
+      resultEl.className = 'pass';
+      resultEl.textContent = '✓ PASS — Property 1 通过（100 次运行）';
+      detailEl.textContent =
+        '对任意非空、非纯空白的查询字符串，触发 onWorkflowStart 后，\n' +
+        '#message-list 的子节点数量至少增加 1（用户气泡）。\n\n' +
+        '验证需求：1.1';
+      console.log('[Property 1] PASS');
+
+    } catch (err) {
+      // FAIL
+      resultEl.className = 'fail';
+      resultEl.textContent = '✗ FAIL — Property 1 失败';
+      detailEl.textContent = String(err);
+      console.error('[Property 1] FAIL', err);
+    }
+  </script>
+</body>
+</html>

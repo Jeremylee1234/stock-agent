@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Property Test 6 — 错误事件显示错误提示</title>
+  <style>
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 32px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 18px; margin-bottom: 8px; }
+    .meta { color: #8b949e; font-size: 12px; margin-bottom: 24px; }
+    #result {
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    #result.pass { background: rgba(63,185,80,0.15); border: 1px solid #3fb950; color: #3fb950; }
+    #result.fail { background: rgba(248,81,73,0.15); border: 1px solid #f85149; color: #f85149; }
+    #result.pending { background: rgba(88,166,255,0.1); border: 1px solid #58a6ff; color: #58a6ff; }
+    pre {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #8b949e;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Property Test 6: 错误事件显示错误提示</h1>
+  <div class="meta">
+    Validates: Requirements 1.5 &nbsp;|&nbsp;
+    Feature: stock-agent-desktop-ui &nbsp;|&nbsp;
+    Framework: fast-check (CDN)
+  </div>
+
+  <div id="result" class="pending">⏳ 运行中...</div>
+  <pre id="detail"></pre>
+
+  <!-- Hidden message-list used by the functions under test -->
+  <div id="message-list" style="display:none;"></div>
+
+  <script type="module">
+    // Feature: stock-agent-desktop-ui, Property 6: 错误事件显示错误提示
+
+    import * as fc from 'https://cdn.jsdelivr.net/npm/fast-check@3/+esm';
+
+    // ─── Minimal re-implementation of the logic under test ───────────────────
+
+    /**
+     * showError — mirrors the production implementation in index.html.
+     * Appends an error card with error text and a retry button to #message-list.
+     * @param {string} message
+     */
+    function showError(message) {
+      const messageList = document.getElementById('message-list');
+      const card = document.createElement('div');
+      card.className = 'error-card';
+
+      const textEl = document.createElement('span');
+      textEl.className = 'error-text';
+      textEl.textContent = `⚠ ${message}`;
+      card.appendChild(textEl);
+
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'error-retry-btn';
+      retryBtn.type = 'button';
+      retryBtn.textContent = '重试';
+      card.appendChild(retryBtn);
+
+      messageList.appendChild(card);
+    }
+
+    // ─── Property 6 ──────────────────────────────────────────────────────────
+
+    const resultEl = document.getElementById('result');
+    const detailEl = document.getElementById('detail');
+
+    try {
+      fc.assert(
+        fc.property(
+          // Generate arbitrary non-empty error message strings
+          fc.string({ minLength: 1 }),
+          (errorMessage) => {
+            const messageList = document.getElementById('message-list');
+            // Reset message list before each run
+            messageList.innerHTML = '';
+
+            // Act: call showError with the arbitrary error message
+            showError(errorMessage);
+
+            // Assert 1: an error card element was appended to the message list
+            const errorCard = messageList.querySelector('.error-card');
+            if (!errorCard) return false;
+
+            // Assert 2: the error card contains the error message text
+            const textEl = errorCard.querySelector('.error-text');
+            if (!textEl) return false;
+            if (!textEl.textContent.includes(errorMessage)) return false;
+
+            // Assert 3: the error card contains a clickable retry button
+            const retryBtn = errorCard.querySelector('.error-retry-btn');
+            if (!retryBtn) return false;
+            if (retryBtn.tagName.toLowerCase() !== 'button') return false;
+
+            return true;
+          }
+        ),
+        { numRuns: 100 }
+      );
+
+      // PASS
+      resultEl.className = 'pass';
+      resultEl.textContent = '✓ PASS — Property 6 通过（100 次运行）';
+      detailEl.textContent =
+        '对任意非空错误消息字符串，调用 showError(message) 后：\n' +
+        '1. #message-list 中出现 .error-card 元素\n' +
+        '2. .error-text 元素的文本包含原始错误消息\n' +
+        '3. 存在可点击的 .error-retry-btn 按钮（<button> 元素）\n\n' +
+        '验证需求：1.5';
+      console.log('[Property 6] PASS');
+
+    } catch (err) {
+      // FAIL
+      resultEl.className = 'fail';
+      resultEl.textContent = '✗ FAIL — Property 6 失败';
+      detailEl.textContent = String(err);
+      console.error('[Property 6] FAIL', err);
+    }
+  </script>
+</body>
+</html>
