@@ -1750,6 +1750,22 @@ async def _is_finance_query(query: str, model: Any) -> bool:
     return True  # 分类失败时保守处理，走正常流程
 
 
+_FINAL_REPORT_SYSTEM_PROMPT = f"""你是专业的 A 股分析师，今天日期是 {TODAY_HYPHEN}。
+
+你将收到用户问题和已收集的数据摘要。请直接撰写最终分析报告。
+
+## 输出要求（必须严格遵守）
+1. **只输出分析报告正文**，不要描述任何数据收集过程
+2. **禁止**出现以下类型的语句：
+   - 「我来分析…」「首先…」「让我查询…」「我需要先了解…」
+   - 「token验证」「换个方式查询」「API 错误」「重试」
+   - 工具名称、接口名称、查询步骤、执行计划
+3. 报告应结构清晰，建议包含：事件/背景、数据要点、影响分析、风险提示、结论
+4. 必须基于已提供的数据摘要，不得编造未提供的数据
+5. 文末注明：以上分析仅供参考，不构成投资建议
+
+使用 Markdown 格式输出。"""
+
 
 # ============================================================================
 # StockAnalysisGraph - LangGraph 工作流
@@ -1939,6 +1955,7 @@ def _build_system_prompt(plan: Dict[str, Any] = None) -> str:
 5. 如果数据量太大无法一次性处理，明确告知用户并建议缩小分析范围
 
 ### 工作原则（必须严格遵守）：
+0. **数据收集阶段禁止输出面向用户的文字** — 需要数据时直接调用工具，不要先说「我来查询…」等过程描述
 1. **CRITICAL：调用任何工具前必须先分析需要哪些fields字段** - 这是最重要的规则！必须为每个工具调用指定fields参数，选择最小必要字段集
 2. 调用工具前先分析问题，确定需要哪些字段和时间范围
 3. 优先获取最小必要数据集，如果不够再逐步扩大
@@ -2021,6 +2038,28 @@ class StockAnalysisGraph:
         """根据 plan 动态构建 ReAct agent"""
         prompt = _build_system_prompt(plan)
         return create_react_agent(self.model, self.tools, prompt=prompt)
+
+    async def _stream_final_report(
+        self, query: str, tool_summaries: List[str]
+    ) -> AsyncGenerator[str, None]:
+        """基于已收集数据单独生成分析报告，避免过程性文字混入。"""
+        from langchain_core.messages import SystemMessage, HumanMessage as HM
+
+        if tool_summaries:
+            data_section = "\n\n".join(
+                f"【数据 {i + 1}】\n{s}" for i, s in enumerate(tool_summaries)
+            )
+        else:
+            data_section = "（未获取到有效工具数据，请基于问题给出有限分析并说明数据不足）"
+
+        messages = [
+            SystemMessage(content=_FINAL_REPORT_SYSTEM_PROMPT),
+            HM(content=f"用户问题：{query}\n\n已收集数据摘要：\n{data_section}"),
+        ]
+        async for chunk in self.model.astream(messages):
+            content = getattr(chunk, "content", "") or ""
+            if content:
+                yield content
 
     def _enable_langsmith_if_configured(self):
         """可选启用 LangSmith（未配置时自动跳过）。"""
@@ -2371,12 +2410,11 @@ class StockAnalysisGraph:
         total_steps = len(steps)
         current_step_idx = 0
         tool_call_buffer: Dict[str, Dict] = {}  # run_id -> {name, args, start_time}
-        in_final_answer = False
         final_answer_chunks: List[str] = []
         tools_used: List[str] = []
+        tool_data_summaries: List[str] = []
 
         # 阶段追踪
-        current_stage: str = "collect_data"
         stage_start_time = time.time()
         collect_data_started = False
         generate_answer_started = False
@@ -2407,7 +2445,6 @@ class StockAnalysisGraph:
                 # 第一个工具调用时开启 collect_data 阶段
                 if not collect_data_started:
                     collect_data_started = True
-                    current_stage = "collect_data"
                     stage_start_time = time.time()
                     # 推进步骤标题
                     step_title = steps[0]["title"] if steps else "收集数据"
@@ -2471,6 +2508,8 @@ class StockAnalysisGraph:
                 summary = _summarize_text(output_str, 200)
                 if tool_name not in tools_used:
                     tools_used.append(tool_name)
+                if status == "success" and summary:
+                    tool_data_summaries.append(f"{tool_name}: {summary}")
 
                 _print_tool_result(tool_name, status, summary, duration_ms)
                 # tool_result 只传状态和耗时，不传数据内容
@@ -2485,7 +2524,7 @@ class StockAnalysisGraph:
                     result_data["error"] = error_msg
                 yield {"event_type": "tool_result", "data": result_data}
 
-            # ── LLM 流式输出（思考 or 最终回答）────────────────────────────
+            # ── LLM 流式输出（数据收集阶段仅打日志，不推送给前端）──────────
             elif etype == "on_chat_model_stream":
                 chunk = edata.get("chunk", {})
                 content = ""
@@ -2497,7 +2536,6 @@ class StockAnalysisGraph:
                 if not content:
                     continue
 
-                # 有 tool_calls 的 chunk 是决策输出，跳过
                 tool_calls = []
                 if hasattr(chunk, "tool_calls"):
                     tool_calls = chunk.tool_calls or []
@@ -2506,52 +2544,50 @@ class StockAnalysisGraph:
                 if tool_calls:
                     continue
 
-                # 没有待处理工具调用 → 进入最终回答阶段
-                if not in_final_answer and not tool_call_buffer:
-                    in_final_answer = True
-                    # 关闭 collect_data 阶段
-                    if collect_data_started:
-                        collect_data_duration = int((time.time() - stage_start_time) * 1000)
-                        yield {
-                            "event_type": "stage_complete",
-                            "data": {
-                                "stage": "collect_data",
-                                "summary": f"共调用 {len(tools_used)} 个工具",
-                                "duration_ms": collect_data_duration,
-                                "timestamp": datetime.now().isoformat(),
-                            }
-                        }
-                    # 开启 generate_answer 阶段
-                    generate_answer_started = True
-                    current_stage = "generate_answer"
-                    stage_start_time = time.time()
-                    _print_final_answer_start()
-                    yield {
-                        "event_type": "stage_start",
-                        "data": {
-                            "stage": "generate_answer",
-                            "title": "生成分析报告",
-                            "description": "基于收集的数据生成最终分析结论",
-                            "timestamp": datetime.now().isoformat(),
-                        }
-                    }
-
+                # ReAct 阶段的思考/过程文字只写终端，不进入最终报告
                 _print_thinking(content)
-                final_answer_chunks.append(content)
-                yield {
-                    "event_type": "analysis_chunk",
-                    "data": {
-                        "stage": current_stage,
-                        "content": content,
-                        "is_final": False,
-                        "timestamp": datetime.now().isoformat(),
-                    }
+
+        # ── 3. 单独生成最终分析报告 ─────────────────────────────────────
+        if collect_data_started:
+            collect_data_duration = int((time.time() - stage_start_time) * 1000)
+            yield {
+                "event_type": "stage_complete",
+                "data": {
+                    "stage": "collect_data",
+                    "summary": f"共调用 {len(tools_used)} 个工具",
+                    "duration_ms": collect_data_duration,
+                    "timestamp": datetime.now().isoformat(),
                 }
+            }
 
-        if in_final_answer:
-            _print_final_answer_end()
+        generate_answer_started = True
+        stage_start_time = time.time()
+        _print_final_answer_start()
+        yield {
+            "event_type": "stage_start",
+            "data": {
+                "stage": "generate_answer",
+                "title": "生成分析报告",
+                "description": "基于收集的数据生成最终分析结论",
+                "timestamp": datetime.now().isoformat(),
+            }
+        }
 
-        # ── 3. 完成 ───────────────────────────────────────────────────────
+        async for content in self._stream_final_report(prepared_query, tool_data_summaries):
+            final_answer_chunks.append(content)
+            yield {
+                "event_type": "analysis_chunk",
+                "data": {
+                    "stage": "generate_answer",
+                    "content": content,
+                    "is_final": False,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            }
+
+        _print_final_answer_end()
+
+        # ── 4. 完成 ───────────────────────────────────────────────────────
         final_answer = "".join(final_answer_chunks)
         total_duration_ms = int((time.time() - workflow_start_time) * 1000)
 

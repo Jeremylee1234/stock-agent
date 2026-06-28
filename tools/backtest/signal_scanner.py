@@ -15,12 +15,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import numpy as np
 
-# Tushare 复用 stock_agent_main 中已初始化的 pro 对象
-import tushare as ts
-token = '111f0e5add7466177e25b12754442fa1a15e2864e1127480dc19d484d4bc'
-pro = ts.pro_api()
-pro._DataApi__token = token
-pro._DataApi__http_url = 'http://106.54.191.157:5000'
+# 复用统一 Tushare 客户端（从 .env 的 DATA_SOURCE__TUSHARE_TOKEN 读取）
+from tools.tushare_client import pro
 
 TODAY_YMD = datetime.now().strftime("%Y%m%d")
 
